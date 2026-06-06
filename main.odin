@@ -1,0 +1,134 @@
+package main
+
+import "core:strconv"
+import "core:strings"
+import "core:bufio"
+import "core:io"
+import "core:fmt"
+import ma "vendor:miniaudio"
+import "core:os"
+
+main :: proc() {
+
+	ctx := ma.context_type{}
+	result := ma.context_init(nil, 0, nil, &ctx)
+	if result != ma.result.SUCCESS {
+		fmt.panicf("Ctx init failed: %s\n", result)
+	}
+
+	pPlaybackInfos: [^]ma.device_info 
+	playbackCount: u32 
+	pCaptureInfos: [^]ma.device_info
+	captureCount: u32
+
+	result = ma.context_get_devices(&ctx, &pPlaybackInfos, &playbackCount, &pCaptureInfos, &captureCount)
+	if result != ma.result.SUCCESS {
+		fmt.panicf("Get devices failed: %s\n", result)
+	}
+
+	// TODO: Allow to select capture device
+	for iDevice := u32(0); iDevice < captureCount; iDevice += 1 {
+	    fmt.printf("Capture %d - %s\n", iDevice, pCaptureInfos[iDevice].name);
+	}
+
+	captureDeviceId := u64(0)
+
+	fmt.printfln("")
+	for {
+		fmt.println("Type the number of the device you want to capture (ex: \"1\"):")
+		
+		stdin := os.to_stream(os.stdin)
+		r : bufio.Reader
+		bufio.reader_init(&r, stdin)
+		bytes, err := bufio.reader_read_slice(&r, '\n')
+		assert(err == .None)
+
+		line := strings.trim_space(string(bytes))
+		if id, ok := strconv.parse_u64(line); ok {
+			captureDeviceId = id
+			break
+		}
+		
+	}
+
+	fmt.printfln("")
+	fmt.printf("Selected device: %d - %s", captureDeviceId, pCaptureInfos[captureDeviceId].name)
+	fmt.printfln("")
+	
+	encoderConfig := ma.encoder_config{}
+	encoder := ma.encoder{}
+
+	config := ma.device_config_init(ma.device_type.capture)
+	config.capture.format = ma.format.f32
+	config.capture.channels = 2
+	config.capture.pDeviceID = &pCaptureInfos[captureDeviceId].id
+	config.sampleRate = 44100
+	config.dataCallback = device_capture_proc
+	
+	encoderConfig = ma.encoder_config_init(ma.encoding_format.wav, config.capture.format, config.capture.channels, config.sampleRate)
+
+	result = ma.encoder_init_file("test.wav", &encoderConfig, &encoder)
+
+	if result != ma.result.SUCCESS {
+		fmt.panicf("Failed to initialize output file\n")
+	}
+	
+	config.pUserData = &encoder
+	
+
+	device := ma.device{}
+	result = ma.device_init(&ctx, &config, &device)
+	if result != ma.result.SUCCESS {
+		fmt.panicf("Device init failed: %s\n", result)
+	}
+
+	ma.device_start(&device)
+	
+	for {
+		fmt.println("Type \"exit\" to close the program:")
+		
+		stdin := os.to_stream(os.stdin)
+		r : bufio.Reader
+		bufio.reader_init(&r, stdin)
+		bytes, err := bufio.reader_read_slice(&r, '\n')
+		assert(err == .None)
+
+		line := strings.trim_space(string(bytes))
+		line = strings.to_lower(line)
+
+		if line == "exit" {
+			break
+		}
+		
+	}
+	
+	ma.device_uninit(&device)
+	
+}
+
+device_capture_proc :: proc "c" (pDevice: ^ma.device, _, pInput: rawptr, frameCount: u32) {
+	ma.encoder_write_pcm_frames((^ma.encoder)(pDevice.pUserData), pInput, u64(frameCount), nil)
+}
+
+// Playback
+
+// package main
+
+// import "core:fmt"
+// import ma "vendor:miniaudio"
+
+// main :: proc() {
+
+// 	engine := ma.engine{}
+// 	engineConfig := ma.engine_config_init()
+	
+// 	result := ma.engine_init(&engineConfig, &engine)
+
+// 	if result != ma.result.SUCCESS {
+// 		fmt.panicf("Error init engine: %s", result)
+// 	}
+
+// 	ma.engine_play_sound(&engine, "test.mp3", nil)
+
+// 	for {}
+// }
