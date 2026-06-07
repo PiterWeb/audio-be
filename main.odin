@@ -17,17 +17,14 @@ main :: proc() {
 		fmt.panicf("Ctx init failed: %s\n", result)
 	}
 
-	pPlaybackInfos: [^]ma.device_info 
-	playbackCount: u32 
 	pCaptureInfos: [^]ma.device_info
 	captureCount: u32
 
-	result = ma.context_get_devices(&ctx, &pPlaybackInfos, &playbackCount, &pCaptureInfos, &captureCount)
+	result = ma.context_get_devices(&ctx, nil, nil, &pCaptureInfos, &captureCount)
 	if result != ma.result.SUCCESS {
 		fmt.panicf("Get devices failed: %s\n", result)
 	}
 
-	// TODO: Allow to select capture device
 	for iDevice := u32(0); iDevice < captureCount; iDevice += 1 {
 	    fmt.printf("Capture %d - %s\n", iDevice, pCaptureInfos[iDevice].name);
 	}
@@ -43,13 +40,16 @@ main :: proc() {
 	bufio.reader_init(&r, stdin)
 	
 	for {
-		fmt.println("Type the number of the device you want to capture (ex: \"1\"):")
+		fmt.println("Type the number of the device you want to capture (ex: 0):")
 		
 		bytes, err := bufio.reader_read_slice(&r, '\n')
 		assert(err == .None)
 
 		line := strings.trim_space(string(bytes))
 		if id, ok := strconv.parse_u64(line); ok {
+			if id > u64(captureCount) - 1 {
+				continue
+			}
 			captureDeviceId = id
 			break
 		}
