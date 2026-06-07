@@ -76,6 +76,8 @@ main :: proc() {
 	if result != ma.result.SUCCESS {
 		fmt.panicf("Failed to initialize output file\n")
 	}
+
+	defer ma.encoder_uninit(&encoder)
 	
 	config.pUserData = &encoder
 	
