@@ -34,12 +34,16 @@ main :: proc() {
 	captureDeviceId := u64(0)
 
 	fmt.printfln("")
+
+	stdin := os.to_stream(os.stdin)
+	defer io.close(stdin)
+	
+	r : bufio.Reader
+	bufio.reader_init(&r, stdin)
+	
 	for {
 		fmt.println("Type the number of the device you want to capture (ex: \"1\"):")
 		
-		stdin := os.to_stream(os.stdin)
-		r : bufio.Reader
-		bufio.reader_init(&r, stdin)
 		bytes, err := bufio.reader_read_slice(&r, '\n')
 		assert(err == .None)
 
@@ -75,7 +79,6 @@ main :: proc() {
 	
 	config.pUserData = &encoder
 	
-
 	device := ma.device{}
 	result = ma.device_init(&ctx, &config, &device)
 	if result != ma.result.SUCCESS {
@@ -83,13 +86,11 @@ main :: proc() {
 	}
 
 	ma.device_start(&device)
+	defer ma.device_uninit(&device) 
 	
 	for {
 		fmt.println("Type \"exit\" to close the program:")
 		
-		stdin := os.to_stream(os.stdin)
-		r : bufio.Reader
-		bufio.reader_init(&r, stdin)
 		bytes, err := bufio.reader_read_slice(&r, '\n')
 		assert(err == .None)
 
@@ -98,12 +99,8 @@ main :: proc() {
 
 		if line == "exit" {
 			break
-		}
-		
+		}	
 	}
-	
-	ma.device_uninit(&device)
-	
 }
 
 device_capture_proc :: proc "c" (pDevice: ^ma.device, _, pInput: rawptr, frameCount: u32) {
