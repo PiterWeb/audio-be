@@ -1,5 +1,6 @@
 package main
 
+import "core:thread"
 import "core:strconv"
 import "core:strings"
 import "core:bufio"
@@ -89,6 +90,10 @@ main :: proc() {
 
 	ma.device_start(&device)
 	defer ma.device_uninit(&device) 
+
+	tcp_server_th := thread.create_and_start_with_poly_data2("0.0.0.0", 8080, tcp_server)
+
+	defer thread.terminate(tcp_server_th, 0)
 	
 	for {
 		fmt.println("Type \"exit\" to close the program:")
