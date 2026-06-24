@@ -4,10 +4,12 @@ import "core:fmt"
 import "core:net"
 import "core:thread"
 
+@(private="file")
 is_ctrl_d :: proc(bytes: []u8) -> bool {
 	return len(bytes) == 1 && bytes[0] == 4
 }
 
+@(private="file")
 is_empty :: proc(bytes: []u8) -> bool {
 	return(
 		(len(bytes) == 2 && bytes[0] == '\r' && bytes[1] == '\n') ||
@@ -15,6 +17,7 @@ is_empty :: proc(bytes: []u8) -> bool {
 	)
 }
 
+@(private="file")
 is_telnet_ctrl_c :: proc(bytes: []u8) -> bool {
 	return(
 		(len(bytes) == 3 && bytes[0] == 255 && bytes[1] == 251 && bytes[2] == 6) ||
@@ -27,6 +30,7 @@ is_telnet_ctrl_c :: proc(bytes: []u8) -> bool {
 	)
 }
 
+@(private="file")
 handle_msg :: proc(sock: net.TCP_Socket) {
 	buffer: [256]u8
 	for {
