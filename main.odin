@@ -71,7 +71,7 @@ main :: proc() {
 	encoder := ma.encoder{}
 
 	config := ma.device_config_init(ma.device_type.capture)
-	config.capture.format = ma.format.u8
+	config.capture.format = ma.format.s24
 	config.capture.channels = 2
 	config.capture.pDeviceID = &pCaptureInfos[captureDeviceId].id
 	config.sampleRate = 44100
@@ -87,10 +87,37 @@ main :: proc() {
 	result = ma.encoder_init(on_write, on_seek, &audioQueue, &encoderConfig, &encoder)
 
 	defer {
-		sync.rw_mutex_shared_guard(&audioQueue.mutex)
-		// audioStream := io.Reader{data = &audioQueue.queue.data}
-		// err := os.write_entire_file_from_bytes("test.wav", audioQueue.queue.data[:])
-		// assert(err == nil)
+
+		if os.exists("test.pcm") {
+			os.remove("test.pcm")
+		}
+		testFile, err := os.open("test.pcm", os.File_Flags{.Read, .Write, .Create})
+
+		if err != nil {
+			fmt.panicf("Error opening test.wav: %s", err)
+		}
+		
+		for {
+			if sync.rw_mutex_shared_guard(&audioQueue.mutex) {
+
+				if queue.len(audioQueue.queue) == 0 {
+					break
+				}
+
+				el, ok := queue.pop_front_safe(&audioQueue.queue)
+
+				if !ok {
+					break
+				}
+				
+				n, err := os.write_byte(testFile, el)
+
+				if err != nil {
+					break
+				}
+				
+			}
+		}
 	}
 	
 	if result != ma.result.SUCCESS {
@@ -140,14 +167,6 @@ on_write :: proc "c" (pEncoder: ^ma.encoder, pBufferIn: rawptr, bytesToWrite: c.
 	context = runtime.default_context()
 
 	if sync.rw_mutex_guard(&audioQueue.mutex) {
-		
-		// for i in 0..<bytesToWrite {
-		// 	_, err := queue.push_back(&audioQueue.queue, bufferIn[i])
-		
-		// 	if err != nil {
-		// 		fmt.panicf("Error append: %s\n", err)
-		// 	}	
-		// }
 		
 		_, err := queue.push_back_elems(&audioQueue.queue, ..bufferIn[:bytesToWrite])
 	
