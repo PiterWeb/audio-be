@@ -1,5 +1,7 @@
 package main
 
+import "core:sync"
+import "core:c"
 import "core:thread"
 import "core:strconv"
 import "core:strings"
@@ -8,6 +10,13 @@ import "core:io"
 import "core:fmt"
 import ma "vendor:miniaudio"
 import "core:os"
+import "base:runtime"
+import "core:container/queue"
+
+AudioQueue :: struct {
+	queue: queue.Queue(u8),
+	mutex: sync.RW_Mutex
+}
 
 main :: proc() {
 
@@ -31,7 +40,7 @@ main :: proc() {
 
 	captureDeviceId := u64(0)
 
-	fmt.printfln("")
+	fmt.println("")
 
 	stdin := os.to_stream(os.stdin)
 	defer io.close(stdin)
@@ -40,7 +49,7 @@ main :: proc() {
 	bufio.reader_init(&r, stdin)
 	
 	for {
-		fmt.println("Type the number of the device you want to capture (ex: 0):")
+		fmt.printfln("Type the number of the device you want to capture (ex: 0):")
 		
 		bytes, err := bufio.reader_read_slice(&r, '\n')
 		assert(err == .None)
@@ -56,24 +65,34 @@ main :: proc() {
 		
 	}
 
-	fmt.printfln("")
-	fmt.printf("Selected device: %d - %s", captureDeviceId, pCaptureInfos[captureDeviceId].name)
-	fmt.printfln("")
+	fmt.printfln("Selected device: %d - %s", captureDeviceId, pCaptureInfos[captureDeviceId].name)
 	
 	encoderConfig := ma.encoder_config{}
 	encoder := ma.encoder{}
 
 	config := ma.device_config_init(ma.device_type.capture)
-	config.capture.format = ma.format.f32
+	config.capture.format = ma.format.u8
 	config.capture.channels = 2
 	config.capture.pDeviceID = &pCaptureInfos[captureDeviceId].id
 	config.sampleRate = 44100
 	config.dataCallback = device_capture_proc
 	
 	encoderConfig = ma.encoder_config_init(ma.encoding_format.wav, config.capture.format, config.capture.channels, config.sampleRate)
+	
+	// result = ma.encoder_init_file("test.wav", &encoderConfig, &encoder)
 
-	result = ma.encoder_init_file("test.wav", &encoderConfig, &encoder)
+	audioQueue := AudioQueue{}
+	queue.init(&audioQueue.queue)
+	
+	result = ma.encoder_init(on_write, on_seek, &audioQueue, &encoderConfig, &encoder)
 
+	defer {
+		sync.rw_mutex_shared_guard(&audioQueue.mutex)
+		// audioStream := io.Reader{data = &audioQueue.queue.data}
+		// err := os.write_entire_file_from_bytes("test.wav", audioQueue.queue.data[:])
+		// assert(err == nil)
+	}
+	
 	if result != ma.result.SUCCESS {
 		fmt.panicf("Failed to initialize output file\n")
 	}
@@ -112,6 +131,40 @@ main :: proc() {
 
 device_capture_proc :: proc "c" (pDevice: ^ma.device, _, pInput: rawptr, frameCount: u32) {
 	ma.encoder_write_pcm_frames((^ma.encoder)(pDevice.pUserData), pInput, u64(frameCount), nil)
+}
+
+on_write :: proc "c" (pEncoder: ^ma.encoder, pBufferIn: rawptr, bytesToWrite: c.size_t, pBytesWritten: ^c.size_t) -> ma.result {
+	audioQueue := cast(^AudioQueue)(pEncoder.pUserData)
+	bufferIn := cast([^]u8)(pBufferIn)
+	
+	context = runtime.default_context()
+
+	if sync.rw_mutex_guard(&audioQueue.mutex) {
+		
+		// for i in 0..<bytesToWrite {
+		// 	_, err := queue.push_back(&audioQueue.queue, bufferIn[i])
+		
+		// 	if err != nil {
+		// 		fmt.panicf("Error append: %s\n", err)
+		// 	}	
+		// }
+		
+		_, err := queue.push_back_elems(&audioQueue.queue, ..bufferIn[:bytesToWrite])
+	
+		if err != nil {
+			fmt.panicf("Error append: %s\n", err)
+		}	
+
+		fmt.printfln("Audioqueue size: %d", audioQueue.queue.len)
+	}
+	
+	pBytesWritten^ = bytesToWrite
+
+	return ma.result.SUCCESS
+}
+
+on_seek :: proc "c" (pEncoder: ^ma.encoder, offset: i64, origin: ma.seek_origin) -> ma.result {
+	return ma.result.SUCCESS
 }
 
 // Playback
