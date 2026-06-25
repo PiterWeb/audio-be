@@ -104,7 +104,24 @@ main :: proc() {
 	tcp_server_th := thread.create_and_start_with_poly_data2("0.0.0.0", 8080, tcp_server)
 	defer thread.terminate(tcp_server_th, 0)
 
-	queue_handler_th := thread.create_and_start_with_poly_data(&audioQueue, queue_handler)
+	if os.exists("test.pcm") {
+		os.remove("test.pcm")
+	}
+	testFile, err := os.open("test.pcm", os.File_Flags{.Read, .Write, .Create})
+
+	if err != nil {
+		fmt.panicf("Error opening test.wav: %s", err)
+	}
+
+	defer os.close(testFile)
+
+	testStream := os.to_writer(testFile)
+	defer io.close(testStream)
+	
+	wTest : bufio.Writer
+	bufio.writer_init(&wTest, testStream)
+	
+	queue_handler_th := thread.create_and_start_with_poly_data2(&audioQueue, &wTest, queue_handler)
 	defer thread.terminate(queue_handler_th, 0)
 	
 	for {
@@ -152,24 +169,7 @@ on_seek :: proc "c" (pEncoder: ^ma.encoder, offset: i64, origin: ma.seek_origin)
 	return ma.result.SUCCESS
 }
 
-queue_handler :: proc (audioQueue: ^AudioQueue) {
-	if os.exists("test.pcm") {
-		os.remove("test.pcm")
-	}
-	testFile, err := os.open("test.pcm", os.File_Flags{.Read, .Write, .Create})
-
-	if err != nil {
-		fmt.panicf("Error opening test.wav: %s", err)
-	}
-
-	defer os.close(testFile)
-
-	testStream := os.to_writer(testFile)
-	defer io.close(testStream)
-	
-	w : bufio.Writer
-	bufio.writer_init(&w, testStream)
-	
+queue_handler :: proc (audioQueue: ^AudioQueue, w: ^bufio.Writer) {
 	for {
 		if sync.rw_mutex_guard(&audioQueue.mutex) {
 
@@ -183,7 +183,7 @@ queue_handler :: proc (audioQueue: ^AudioQueue) {
 				continue
 			}
 
-			err := bufio.writer_write_byte(&w, el)
+			err := bufio.writer_write_byte(w, el)
 
 			if err != nil {
 				break
