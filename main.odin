@@ -78,47 +78,11 @@ main :: proc() {
 	config.dataCallback = device_capture_proc
 	
 	encoderConfig = ma.encoder_config_init(ma.encoding_format.wav, config.capture.format, config.capture.channels, config.sampleRate)
-	
-	// result = ma.encoder_init_file("test.wav", &encoderConfig, &encoder)
 
 	audioQueue := AudioQueue{}
 	queue.init(&audioQueue.queue)
 	
 	result = ma.encoder_init(on_write, on_seek, &audioQueue, &encoderConfig, &encoder)
-
-	defer {
-
-		if os.exists("test.pcm") {
-			os.remove("test.pcm")
-		}
-		testFile, err := os.open("test.pcm", os.File_Flags{.Read, .Write, .Create})
-
-		if err != nil {
-			fmt.panicf("Error opening test.wav: %s", err)
-		}
-		
-		for {
-			if sync.rw_mutex_shared_guard(&audioQueue.mutex) {
-
-				if queue.len(audioQueue.queue) == 0 {
-					break
-				}
-
-				el, ok := queue.pop_front_safe(&audioQueue.queue)
-
-				if !ok {
-					break
-				}
-				
-				n, err := os.write_byte(testFile, el)
-
-				if err != nil {
-					break
-				}
-				
-			}
-		}
-	}
 	
 	if result != ma.result.SUCCESS {
 		fmt.panicf("Failed to initialize output file\n")
@@ -138,8 +102,10 @@ main :: proc() {
 	defer ma.device_uninit(&device) 
 
 	tcp_server_th := thread.create_and_start_with_poly_data2("0.0.0.0", 8080, tcp_server)
-
 	defer thread.terminate(tcp_server_th, 0)
+
+	queue_handler_th := thread.create_and_start_with_poly_data(&audioQueue, queue_handler)
+	defer thread.terminate(queue_handler_th, 0)
 	
 	for {
 		fmt.println("Type \"exit\" to close the program:")
@@ -174,7 +140,7 @@ on_write :: proc "c" (pEncoder: ^ma.encoder, pBufferIn: rawptr, bytesToWrite: c.
 			fmt.panicf("Error append: %s\n", err)
 		}	
 
-		fmt.printfln("Audioqueue size: %d", audioQueue.queue.len)
+		// fmt.printfln("Audioqueue size: %d", audioQueue.queue.len)
 	}
 	
 	pBytesWritten^ = bytesToWrite
@@ -184,6 +150,47 @@ on_write :: proc "c" (pEncoder: ^ma.encoder, pBufferIn: rawptr, bytesToWrite: c.
 
 on_seek :: proc "c" (pEncoder: ^ma.encoder, offset: i64, origin: ma.seek_origin) -> ma.result {
 	return ma.result.SUCCESS
+}
+
+queue_handler :: proc (audioQueue: ^AudioQueue) {
+	if os.exists("test.pcm") {
+		os.remove("test.pcm")
+	}
+	testFile, err := os.open("test.pcm", os.File_Flags{.Read, .Write, .Create})
+
+	if err != nil {
+		fmt.panicf("Error opening test.wav: %s", err)
+	}
+
+	defer os.close(testFile)
+
+	testStream := os.to_writer(testFile)
+	defer io.close(testStream)
+	
+	w : bufio.Writer
+	bufio.writer_init(&w, testStream)
+	
+	for {
+		if sync.rw_mutex_guard(&audioQueue.mutex) {
+
+			if queue.len(audioQueue.queue) == 0 {
+				continue
+			}
+
+			el, ok := queue.pop_front_safe(&audioQueue.queue)
+
+			if !ok {
+				continue
+			}
+
+			err := bufio.writer_write_byte(&w, el)
+
+			if err != nil {
+				break
+			}
+			
+		}
+	}
 }
 
 // Playback
