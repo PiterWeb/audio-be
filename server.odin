@@ -1,8 +1,11 @@
 package main
 
+import "core:sync"
 import "core:fmt"
 import "core:net"
 import "core:thread"
+import "core:container/queue"
+import dbus "odin-dbus"
 
 @(private="file")
 is_ctrl_d :: proc(bytes: []u8) -> bool {
@@ -31,33 +34,68 @@ is_telnet_ctrl_c :: proc(bytes: []u8) -> bool {
 }
 
 @(private="file")
-handle_msg :: proc(sock: net.TCP_Socket) {
-	buffer: [256]u8
+handle_client :: proc(dbus_conn: ^dbus.Connection, sock: net.TCP_Socket, audioQueue: ^AudioQueue) {
+	defer net.close(sock)
+
+	th_stream_audio := thread.create_and_start_with_poly_data2(sock, audioQueue, stream_audio_client)
+	defer thread.terminate(th_stream_audio, 0)
+
+	buffer: [1]u8
+	
 	for {
 		bytes_recv, err_recv := net.recv_tcp(sock, buffer[:])
+
 		if err_recv != nil {
-			fmt.println("Failed to receive data")
-		}
-		received := buffer[:bytes_recv]
-		if len(received) == 0 ||
-		   is_ctrl_d(received) ||
-		   is_empty(received) ||
-		   is_telnet_ctrl_c(received) {
-			fmt.println("Disconnecting client")
 			break
 		}
-		// fmt.printfln("Server received [ %d bytes ]: %s", len(received), received)
-		// bytes_sent, err_send := net.send_tcp(sock, received)
-		// if err_send != nil {
-		// 	fmt.println("Failed to send data")
-		// }
-		// sent := received[:bytes_sent]
-		// fmt.printfln("Server sent [ %d bytes ]: %s", len(sent), sent)
+
+		if bytes_recv == 0 {
+			break
+		}
+		
+		msg := buffer[0]
+
+		if msg == 0 {
+			spotify_prev(dbus_conn)			
+		} else if msg == 1 {
+			spotify_play_pause(dbus_conn)
+		} else if msg == 2 {
+			spotify_next(dbus_conn)
+		}
+		
 	}
-	net.close(sock)
+	
 }
 
-tcp_server :: proc(ip: string, port: int) {
+@(private="file")
+stream_audio_client :: proc(sock: net.TCP_Socket, audioQueue: ^AudioQueue) {
+	buffer: [96]u8 // Every frame is 24 bits (3 bytes) so the buffer must be len(buffer) % 3 = 0
+	bufferIndex := 0
+
+	for {
+		if sync.rw_mutex_guard(&audioQueue.mutex) {
+
+			el, ok := queue.pop_front_safe(&audioQueue.queue)
+
+			if !ok {
+				continue
+			}
+
+			buffer[bufferIndex] = el
+			bufferIndex += 1
+
+			if bufferIndex >=len(buffer) {
+				bytes_sent, err_send := net.send_tcp(sock, buffer[:])
+				if err_send != nil {
+					return
+				}
+				bufferIndex = 0
+			}
+		}
+	}	
+}
+
+tcp_server :: proc(dbus_conn: ^dbus.Connection, audioQueue: ^AudioQueue, ip: string, port: int) {
 	local_addr, ok := net.parse_ip4_address(ip)
 	if !ok {
 		fmt.println("Failed to parse IP address")
@@ -79,7 +117,7 @@ tcp_server :: proc(ip: string, port: int) {
 			fmt.println("Failed to accept TCP connection")
 			continue
 		}
-		thread.create_and_start_with_poly_data(cli, handle_msg)
+		thread.create_and_start_with_poly_data3(dbus_conn, cli, audioQueue, handle_client)
 	}
 	net.close(sock)
 	fmt.println("Closed socket")

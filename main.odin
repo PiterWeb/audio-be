@@ -12,6 +12,7 @@ import ma "vendor:miniaudio"
 import "core:os"
 import "base:runtime"
 import "core:container/queue"
+import dbus "odin-dbus"
 
 AudioQueue :: struct {
 	queue: queue.Queue(u8),
@@ -20,6 +21,9 @@ AudioQueue :: struct {
 
 main :: proc() {
 
+	dbus_conn := init_dbus()
+	defer dbus.connection_unref(dbus_conn)
+	
 	ctx := ma.context_type{}
 	result := ma.context_init(nil, 0, nil, &ctx)
 	if result != ma.result.SUCCESS {
@@ -101,28 +105,8 @@ main :: proc() {
 	ma.device_start(&device)
 	defer ma.device_uninit(&device) 
 
-	tcp_server_th := thread.create_and_start_with_poly_data2("0.0.0.0", 8080, tcp_server)
+	tcp_server_th := thread.create_and_start_with_poly_data4(dbus_conn, &audioQueue, "0.0.0.0", 8080, tcp_server)
 	defer thread.terminate(tcp_server_th, 0)
-
-	if os.exists("test.pcm") {
-		os.remove("test.pcm")
-	}
-	testFile, err := os.open("test.pcm", os.File_Flags{.Read, .Write, .Create})
-
-	if err != nil {
-		fmt.panicf("Error opening test.wav: %s", err)
-	}
-
-	defer os.close(testFile)
-
-	testStream := os.to_writer(testFile)
-	defer io.close(testStream)
-	
-	wTest : bufio.Writer
-	bufio.writer_init(&wTest, testStream)
-	
-	queue_handler_th := thread.create_and_start_with_poly_data2(&audioQueue, &wTest, queue_handler)
-	defer thread.terminate(queue_handler_th, 0)
 	
 	for {
 		fmt.println("Type \"exit\" to close the program:")
@@ -135,7 +119,13 @@ main :: proc() {
 
 		if line == "exit" {
 			break
-		}	
+		} else if line == "next" {
+			spotify_next(dbus_conn)
+		} else if line == "prev" {
+			spotify_prev(dbus_conn)
+		} else if line == "play/pause" {
+			spotify_play_pause(dbus_conn)
+		}
 	}
 }
 
@@ -168,50 +158,3 @@ on_write :: proc "c" (pEncoder: ^ma.encoder, pBufferIn: rawptr, bytesToWrite: c.
 on_seek :: proc "c" (pEncoder: ^ma.encoder, offset: i64, origin: ma.seek_origin) -> ma.result {
 	return ma.result.SUCCESS
 }
-
-queue_handler :: proc (audioQueue: ^AudioQueue, w: ^bufio.Writer) {
-	for {
-		if sync.rw_mutex_guard(&audioQueue.mutex) {
-
-			if queue.len(audioQueue.queue) == 0 {
-				continue
-			}
-
-			el, ok := queue.pop_front_safe(&audioQueue.queue)
-
-			if !ok {
-				continue
-			}
-
-			err := bufio.writer_write_byte(w, el)
-
-			if err != nil {
-				break
-			}
-			
-		}
-	}
-}
-
-// Playback
-
-// package main
-
-// import "core:fmt"
-// import ma "vendor:miniaudio"
-
-// main :: proc() {
-
-// 	engine := ma.engine{}
-// 	engineConfig := ma.engine_config_init()
-	
-// 	result := ma.engine_init(&engineConfig, &engine)
-
-// 	if result != ma.result.SUCCESS {
-// 		fmt.panicf("Error init engine: %s", result)
-// 	}
-
-// 	ma.engine_play_sound(&engine, "test.mp3", nil)
-
-// 	for {}
-// }
