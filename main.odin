@@ -84,7 +84,7 @@ main :: proc() {
 	encoderConfig = ma.encoder_config_init(ma.encoding_format.wav, config.capture.format, config.capture.channels, config.sampleRate)
 
 	audioQueue := AudioQueue{}
-	queue.init(&audioQueue.queue, 1024 * 1024 * 5) // 5 MB Capacity
+	queue.init(&audioQueue.queue, 1024 * 1024 * 3) // 3 MB Capacity
 	
 	result = ma.encoder_init(on_write, on_seek, &audioQueue, &encoderConfig, &encoder)
 	
