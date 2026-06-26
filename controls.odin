@@ -8,14 +8,14 @@ spotify_service: cstring : "org.mpris.MediaPlayer2.spotify"
 @(private="file")
 object_path: cstring : "/org/mpris/MediaPlayer2"
 @(private="file")
-spotify_interface: cstring: "org.mpris.MediaPlayer2.Player"
+music_player_interface: cstring: "org.mpris.MediaPlayer2.Player"
 
 @(private="file")
-spotify_method_play_pause: cstring : "PlayPause"
+player_method_play_pause: cstring : "PlayPause"
 @(private="file")
-spotify_method_previous: cstring: "Previous"
+player_method_previous: cstring: "Previous"
 @(private="file")
-spotify_method_next: cstring: "Next"
+player_method_next: cstring: "Next"
 
 init_dbus :: proc() -> ^dbus.Connection {
 	err: dbus.Error
@@ -32,16 +32,16 @@ init_dbus :: proc() -> ^dbus.Connection {
 }
 
 spotify_play_pause :: proc (conn: ^dbus.Connection) {
-	msg := dbus.message_new_method_call(spotify_service, object_path, spotify_interface, spotify_method_play_pause)
-	dbus.connection_send(conn, msg, nil)
+	play_pause_msg := dbus.message_new_method_call(spotify_service, object_path, music_player_interface, player_method_play_pause)
+	dbus.connection_send(conn, play_pause_msg, nil)
 }
 
 spotify_next :: proc (conn: ^dbus.Connection) {
-	msg := dbus.message_new_method_call(spotify_service, object_path, spotify_interface, spotify_method_next)
-	dbus.connection_send(conn, msg, nil)
+	next_msg := dbus.message_new_method_call(spotify_service, object_path, music_player_interface, player_method_next)
+	dbus.connection_send(conn, next_msg, nil)
 }
 
 spotify_prev :: proc (conn: ^dbus.Connection) {
-	msg := dbus.message_new_method_call(spotify_service, object_path, spotify_interface, spotify_method_previous)
-	dbus.connection_send(conn, msg, nil)
+	prev_msg := dbus.message_new_method_call(spotify_service, object_path, music_player_interface, player_method_previous)
+	dbus.connection_send(conn, prev_msg, nil)
 }
