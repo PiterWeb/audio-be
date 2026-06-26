@@ -23,6 +23,8 @@ main :: proc() {
 
 	dbus_conn := init_dbus()
 	defer dbus.connection_unref(dbus_conn)
+
+	entry_group_mdns := announce_mdns(dbus_conn)
 	
 	ctx := ma.context_type{}
 	result := ma.context_init(nil, 0, nil, &ctx)
@@ -84,7 +86,7 @@ main :: proc() {
 	encoderConfig = ma.encoder_config_init(ma.encoding_format.wav, config.capture.format, config.capture.channels, config.sampleRate)
 
 	audioQueue := AudioQueue{}
-	queue.init(&audioQueue.queue)
+	queue.init(&audioQueue.queue, 1024 * 1024 * 5) // 5 MB Capacity
 	
 	result = ma.encoder_init(on_write, on_seek, &audioQueue, &encoderConfig, &encoder)
 	
@@ -140,12 +142,22 @@ on_write :: proc "c" (pEncoder: ^ma.encoder, pBufferIn: rawptr, bytesToWrite: c.
 	context = runtime.default_context()
 
 	if sync.rw_mutex_guard(&audioQueue.mutex) {
+
+		if queue.space(audioQueue.queue) < int(bytesToWrite) {
+			queue.consume_front(&audioQueue.queue, int(bytesToWrite))
+			_, err := queue.push_back_elems(&audioQueue.queue, ..bufferIn[:bytesToWrite])
+
+			if err != nil {
+				return ma.result.ERROR
+			}
 		
-		_, err := queue.push_back_elems(&audioQueue.queue, ..bufferIn[:bytesToWrite])
-	
-		if err != nil {
-			fmt.panicf("Error append: %s\n", err)
-		}	
+		} else {
+			_, err := queue.push_back_elems(&audioQueue.queue, ..bufferIn[:bytesToWrite])
+		
+			if err != nil {
+				return ma.result.ERROR
+			}	
+		}
 
 		// fmt.printfln("Audioqueue size: %d", audioQueue.queue.len)
 	}
