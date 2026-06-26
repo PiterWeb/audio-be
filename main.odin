@@ -41,7 +41,7 @@ main :: proc() {
 	}
 
 	for iDevice := u32(0); iDevice < captureCount; iDevice += 1 {
-	    fmt.printf("Capture %d - %s\n", iDevice, pCaptureInfos[iDevice].name);
+	    fmt.printfln("Capture %d - %s", iDevice, pCaptureInfos[iDevice].name);
 	}
 
 	captureDeviceId := u64(0)
@@ -107,7 +107,10 @@ main :: proc() {
 	ma.device_start(&device)
 	defer ma.device_uninit(&device) 
 
-	tcp_server_th := thread.create_and_start_with_poly_data4(dbus_conn, &audioQueue, "0.0.0.0", 8080, tcp_server)
+	tcp_address :: "0.0.0.0"
+	tcp_port :: 8080
+	
+	tcp_server_th := thread.create_and_start_with_poly_data4(dbus_conn, &audioQueue, tcp_address, tcp_port, tcp_server)
 	defer thread.terminate(tcp_server_th, 0)
 	
 	for {
