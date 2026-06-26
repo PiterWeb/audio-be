@@ -75,7 +75,7 @@ main :: proc() {
 	encoder := ma.encoder{}
 
 	config := ma.device_config_init(ma.device_type.capture)
-	config.capture.format = ma.format.s24
+	config.capture.format = ma.format.s32
 	config.capture.channels = 2
 	config.capture.pDeviceID = &pCaptureInfos[captureDeviceId].id
 	config.sampleRate = 44100
@@ -143,7 +143,7 @@ on_write :: proc "c" (pEncoder: ^ma.encoder, pBufferIn: rawptr, bytesToWrite: c.
 	context = runtime.default_context()
 
 	if sync.rw_mutex_guard(&audioQueue.mutex) {
-
+		
 		if queue.space(audioQueue.queue) < int(bytesToWrite) {
 			queue.consume_front(&audioQueue.queue, int(bytesToWrite))
 			_, err := queue.push_back_elems(&audioQueue.queue, ..bufferIn[:bytesToWrite])
