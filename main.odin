@@ -23,8 +23,6 @@ main :: proc() {
 
 	dbus_conn := init_dbus()
 	defer dbus.connection_unref(dbus_conn)
-
-	entry_group_mdns := announce_mdns(dbus_conn)
 	
 	ctx := ma.context_type{}
 	result := ma.context_init(nil, 0, nil, &ctx)
