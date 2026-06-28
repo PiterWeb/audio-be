@@ -43,7 +43,7 @@ msg_play_pause :: MsgType(1)
 msg_next :: MsgType(2)
 
 @(private="file")
-handle_client :: proc(dbus_conn: ^dbus.Connection, sock: net.TCP_Socket, audioQueue: ^AudioQueue) {
+handle_client :: proc(controller: PlayerController, sock: net.TCP_Socket, audioQueue: ^AudioQueue) {
 	defer net.close(sock)
 
 	buffer: [1]u8
@@ -80,11 +80,11 @@ handle_client :: proc(dbus_conn: ^dbus.Connection, sock: net.TCP_Socket, audioQu
 
 			switch msg {
 			case msg_prev:
-				spotify_prev(dbus_conn)
+				player_prev(controller)
 			case msg_play_pause:
-				spotify_play_pause(dbus_conn)
+				player_play_pause(controller)
 			case msg_next:
-				spotify_next(dbus_conn)
+				player_next(controller)
 			}
 		}
 	}
@@ -122,7 +122,7 @@ stream_audio_client :: proc(sock: net.TCP_Socket, audioQueue: ^AudioQueue) {
 	}	
 }
 
-tcp_server :: proc(dbus_conn: ^dbus.Connection, audioQueue: ^AudioQueue, ip: string, port: int) {
+tcp_server :: proc(controller: PlayerController, audioQueue: ^AudioQueue, ip: string, port: int) {
 	local_addr, ok := net.parse_ip4_address(ip)
 	if !ok {
 		fmt.println("Failed to parse IP address")
@@ -147,7 +147,7 @@ tcp_server :: proc(dbus_conn: ^dbus.Connection, audioQueue: ^AudioQueue, ip: str
 			fmt.println("Failed to accept TCP connection")
 			continue
 		}
-		thread.create_and_start_with_poly_data3(dbus_conn, cli, audioQueue, handle_client)
+		thread.create_and_start_with_poly_data3(controller, cli, audioQueue, handle_client)
 	}
 	fmt.println("Closed socket")
 }

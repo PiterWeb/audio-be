@@ -21,9 +21,6 @@ AudioQueue :: struct {
 
 main :: proc() {
 
-	dbus_conn := init_dbus()
-	defer dbus.connection_unref(dbus_conn)
-	
 	ctx := ma.context_type{}
 	result := ma.context_init(nil, 0, nil, &ctx)
 	if result != ma.result.SUCCESS {
@@ -105,10 +102,41 @@ main :: proc() {
 	ma.device_start(&device)
 	defer ma.device_uninit(&device) 
 
+	apps := apps_controller
+	for appName, i in apps {
+		fmt.printfln("App %d - %s", i, strings.to_upper(appName))
+	}
+
+	selectedApp := u64(0)
+	
+	for {
+		fmt.println("Type the number of the app you want to controll (ex: 0):")
+		
+		bytes, err := bufio.reader_read_slice(&r, '\n')
+		assert(err == .None)
+
+		line := strings.trim_space(string(bytes))
+		line = strings.to_lower(line)
+
+		if id, ok := strconv.parse_u64(line); ok {
+			if id > u64(len(apps)) - 1 {
+				continue
+			}
+			selectedApp = id
+			break
+		}
+		
+	}
+
+	fmt.printfln("Selected app controller: %d - %s", selectedApp, strings.to_upper(apps[selectedApp]))
+	
+	player_controller := init_player_controller(apps[selectedApp])
+	defer dbus.connection_unref(player_controller.conn)
+	
 	tcp_address :: "0.0.0.0"
 	tcp_port :: 8080
-	
-	tcp_server_th := thread.create_and_start_with_poly_data4(dbus_conn, &audioQueue, tcp_address, tcp_port, tcp_server)
+
+	tcp_server_th := thread.create_and_start_with_poly_data4(player_controller, &audioQueue, tcp_address, tcp_port, tcp_server)
 	defer thread.terminate(tcp_server_th, 0)
 	
 	for {
@@ -123,11 +151,11 @@ main :: proc() {
 		if line == "exit" {
 			break
 		} else if line == "next" {
-			spotify_next(dbus_conn)
+			player_next(player_controller)
 		} else if line == "prev" {
-			spotify_prev(dbus_conn)
+			player_prev(player_controller)
 		} else if line == "play/pause" {
-			spotify_play_pause(dbus_conn)
+			player_play_pause(player_controller)
 		}
 	}
 }

@@ -1,10 +1,11 @@
 package main
 
+import "core:strings"
 import dbus "odin-dbus"
 import "core:fmt"
 
 @(private="file")
-spotify_service: cstring : "org.mpris.MediaPlayer2.spotify"
+base_service: string : "org.mpris.MediaPlayer2"
 @(private="file")
 object_path: cstring : "/org/mpris/MediaPlayer2"
 @(private="file")
@@ -17,31 +18,54 @@ player_method_previous: cstring: "Previous"
 @(private="file")
 player_method_next: cstring: "Next"
 
-init_dbus :: proc() -> ^dbus.Connection {
-	err: dbus.Error
-	dbus.error_init(&err)
+apps_controller :: [2]string{"spotify", "vlc"}
 
-	conn := dbus.bus_get(.SESSION, &err)
-	if dbus.error_is_set(&err) {
-		fmt.eprintfln("Connection Error (%s)", err.message)
-		dbus.error_free(&err)
+PlayerController :: struct {
+	conn: ^dbus.Connection,
+	service: cstring,
+}
+
+init_player_controller :: proc(app: string) -> PlayerController {
+	dbus_err: dbus.Error
+	dbus.error_init(&dbus_err)
+
+	conn := dbus.bus_get(.SESSION, &dbus_err)
+	if dbus.error_is_set(&dbus_err) {
+		err_msg := string(dbus_err.message)
+		dbus.error_free(&dbus_err)
+		fmt.panicf("Dbus Connection Error (%s)\n", err_msg)
 	}
 
-	return conn
+	service_string, err := strings.concatenate([]string{base_service,".", app})
+
+	if err != nil {
+		return PlayerController{
+			conn = conn, service = cstring(base_service + ".spotify")
+		}
+	}
+
+	if service, err := strings.clone_to_cstring(service_string); err == nil {
+		return  PlayerController{conn, service}
+	}
+	
+	return PlayerController{
+		conn = conn, service = cstring(base_service + ".spotify")
+	}
 
 }
 
-spotify_play_pause :: proc (conn: ^dbus.Connection) {
-	play_pause_msg := dbus.message_new_method_call(spotify_service, object_path, music_player_interface, player_method_play_pause)
-	dbus.connection_send(conn, play_pause_msg, nil)
+player_play_pause :: proc (controller: PlayerController) {
+	play_pause_msg := dbus.message_new_method_call(controller.service, object_path, music_player_interface, player_method_play_pause)
+	dbus.connection_send(controller.conn, play_pause_msg, nil)
 }
 
-spotify_next :: proc (conn: ^dbus.Connection) {
-	next_msg := dbus.message_new_method_call(spotify_service, object_path, music_player_interface, player_method_next)
-	dbus.connection_send(conn, next_msg, nil)
+player_next :: proc (controller: PlayerController) {
+	play_pause_msg := dbus.message_new_method_call(controller.service, object_path, music_player_interface, player_method_next)
+	dbus.connection_send(controller.conn, play_pause_msg, nil)
 }
 
-spotify_prev :: proc (conn: ^dbus.Connection) {
-	prev_msg := dbus.message_new_method_call(spotify_service, object_path, music_player_interface, player_method_previous)
-	dbus.connection_send(conn, prev_msg, nil)
+player_prev :: proc (controller: PlayerController) {
+	play_pause_msg := dbus.message_new_method_call(controller.service, object_path, music_player_interface, player_method_previous)
+	dbus.connection_send(controller.conn, play_pause_msg, nil)
 }
+
