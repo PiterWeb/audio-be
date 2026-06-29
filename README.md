@@ -10,3 +10,17 @@ The server is made using the Odin programming language with:
 - odin-dbus to communicate with: spotify and avahi
 
 The client can be found at [github.com/PiterWeb/audio-be-android](https://github.com/PiterWeb/audio-be-android)
+
+## How to build
+(You can only compile for 64-bit Linux)
+
+
+You will need to clone the repo with submodules
+
+```sh
+git clone --recurse-submodules https://github.com/PiterWeb/audio-be.git
+```
+Then you compile with the [Odin](https://odin-lang.org/) compiler
+```sh
+odin build .
+```
