@@ -5,7 +5,6 @@ import "core:fmt"
 import "core:net"
 import "core:thread"
 import "core:container/queue"
-import dbus "odin-dbus"
 
 @(private="file")
 is_ctrl_d :: proc(bytes: []u8) -> bool {

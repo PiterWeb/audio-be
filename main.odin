@@ -132,6 +132,9 @@ main :: proc() {
 	
 	player_controller := init_player_controller(apps[selectedApp])
 	defer dbus.connection_unref(player_controller.conn)
+
+	mdns_controller := announce_mdns()
+	defer free_mdns(mdns_controller)
 	
 	tcp_address :: "0.0.0.0"
 	tcp_port :: 8080
